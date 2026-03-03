@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 
 export const useDocuments = (initialStatus = '') => {
   const [documents, setDocuments] = useState([]);
+  const [pagination, setPagination] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState(initialStatus);
@@ -11,8 +12,10 @@ export const useDocuments = (initialStatus = '') => {
   const fetchDocuments = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await documentsApi.getAllDocuments(status);
-      setDocuments(data);
+      // documentsApi.getAllDocuments now returns { documents: [], pagination: {} }
+      const { documents: docs, pagination: pag } = await documentsApi.getAllDocuments(status);
+      setDocuments(Array.isArray(docs) ? docs : []);
+      setPagination(pag || {});
       setError(null);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to fetch documents');
@@ -29,7 +32,7 @@ export const useDocuments = (initialStatus = '') => {
   const uploadDocument = async (file, title, onProgress) => {
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('document', file); // field name must match multer's 'document' field
       formData.append('title', title);
 
       const response = await documentsApi.uploadDocument(formData, onProgress);
@@ -67,6 +70,7 @@ export const useDocuments = (initialStatus = '') => {
 
   return {
     documents,
+    pagination,
     loading,
     error,
     status,

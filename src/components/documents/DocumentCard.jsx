@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Send, Trash2, Eye, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { FileText, Send, Trash2, Eye, Clock, CheckCircle, XCircle, Activity, Download } from 'lucide-react';
 import Card, { CardBody, CardFooter } from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import { formatDistanceToNow } from 'date-fns';
+import { documentsApi } from '../../api/documents';
 
-const DocumentCard = ({ document, onDelete, onSend }) => {
+const DocumentCard = ({ document, onDelete }) => {
+  const [downloading, setDownloading] = useState(false);
+
   const getStatusBadge = (status) => {
     const statusMap = {
       draft: { variant: 'draft', icon: Clock, label: 'Draft' },
@@ -23,6 +26,25 @@ const DocumentCard = ({ document, onDelete, onSend }) => {
         {label}
       </Badge>
     );
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const blobUrl = await documentsApi.getPdfBlob(document._id);
+      const a = window.document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${document.title}.pdf`;
+      window.document.body.appendChild(a);
+      a.click();
+      window.document.body.removeChild(a);
+      // Revoke after a short delay to allow the download to start
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    } catch (err) {
+      console.error('Download failed:', err);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -43,27 +65,55 @@ const DocumentCard = ({ document, onDelete, onSend }) => {
           {getStatusBadge(document.status)}
         </div>
 
-        {document.signerEmail && (
+        {/* Show signers if present */}
+        {document.signers && document.signers.length > 0 && (
           <div className="mt-2 text-sm text-gray-600">
-            <span className="font-medium">Signer:</span> {document.signerEmail}
+            <span className="font-medium">Signers: </span>
+            {document.signers.map((s, i) => (
+              <span key={i}>
+                {s.name || s.email}
+                {s.signed && <CheckCircle className="inline h-3 w-3 text-green-500 ml-1" />}
+                {i < document.signers.length - 1 ? ', ' : ''}
+              </span>
+            ))}
           </div>
         )}
 
         {document.signatureFields?.length > 0 && (
-          <div className="mt-2 text-sm text-gray-600">
-            <span className="font-medium">Signature fields:</span> {document.signatureFields.length}
+          <div className="mt-1 text-sm text-gray-500">
+            {document.signatureFields.length} signature field(s) placed
           </div>
         )}
       </CardBody>
 
-      <CardFooter className="flex justify-end gap-2">
+      <CardFooter className="flex justify-end gap-2 flex-wrap">
+        {/* Audit trail link — always available */}
+        <Link to={`/documents/${document._id}/audit`}>
+          <Button variant="ghost" size="sm" title="View Audit Trail">
+            <Activity className="h-4 w-4 mr-1" />
+            Audit
+          </Button>
+        </Link>
+
+        {/* Download button — always available */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleDownload}
+          disabled={downloading}
+          title="Download PDF"
+        >
+          <Download className="h-4 w-4 mr-1" />
+          {downloading ? 'Downloading…' : 'Download'}
+        </Button>
+
         <Link to={`/documents/${document._id}`}>
           <Button variant="outline" size="sm">
             <Eye className="h-4 w-4 mr-1" />
             View
           </Button>
         </Link>
-        
+
         {document.status === 'draft' && (
           <>
             <Link to={`/documents/${document._id}/send`}>
@@ -72,8 +122,8 @@ const DocumentCard = ({ document, onDelete, onSend }) => {
                 Send
               </Button>
             </Link>
-            <Button 
-              variant="danger" 
+            <Button
+              variant="danger"
               size="sm"
               onClick={() => onDelete(document._id)}
             >

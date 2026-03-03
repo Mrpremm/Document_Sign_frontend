@@ -34,20 +34,27 @@ axiosInstance.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
+        const refreshToken = localStorage.getItem('refreshToken');
         const response = await axios.post(
-          `${baseURL}/auth/refresh`,
-          {},
+          // Correct endpoint: /auth/refresh-token (not /auth/refresh)
+          `${baseURL}/auth/refresh-token`,
+          { refreshToken },
           { withCredentials: true }
         );
 
-        if (response.data.accessToken) {
-          localStorage.setItem('accessToken', response.data.accessToken);
-          originalRequest.headers.Authorization = `Bearer ${response.data.accessToken}`;
+        const data = response.data?.data;
+        if (data?.accessToken) {
+          localStorage.setItem('accessToken', data.accessToken);
+          if (data.refreshToken) {
+            localStorage.setItem('refreshToken', data.refreshToken);
+          }
+          originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
           return axiosInstance(originalRequest);
         }
       } catch (refreshError) {
-        // Refresh failed, redirect to login
+        // Refresh failed — clear storage and redirect to login
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }

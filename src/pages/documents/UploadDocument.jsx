@@ -4,11 +4,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useDocuments } from '../../hooks/useDocuments';
-import Card, { CardBody, CardHeader } from '../../components/ui/Card';
+import Card, { CardBody } from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import Alert from '../../components/ui/Alert';
+import WhoSignsModal from '../../components/documents/WhoSignsModal';
+import InviteSignersModal from '../../components/documents/InviteSignersModal';
 import { Upload, File, X } from 'lucide-react';
+import { documentsApi } from '../../api/documents';
 
 const uploadSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -21,6 +24,12 @@ const UploadDocument = () => {
   const [dragActive, setDragActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
+
+  // Modal state — after successful upload
+  const [uploadedDoc, setUploadedDoc] = useState(null);
+  const [showWhoSigns, setShowWhoSigns] = useState(false);
+  const [showInviteSigners, setShowInviteSigners] = useState(false);
+  const [savingSigners, setSavingSigners] = useState(false);
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(uploadSchema),
@@ -40,7 +49,6 @@ const UploadDocument = () => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile && droppedFile.type === 'application/pdf') {
       setFile(droppedFile);
@@ -70,12 +78,53 @@ const UploadDocument = () => {
       setError('Please select a file to upload');
       return;
     }
-
     try {
       const response = await uploadDocument(file, data.title, onUploadProgress);
-      navigate(`/documents/${response.document._id}`);
+      // After upload, show the "Who signs?" modal
+      setUploadedDoc(response);
+      setShowWhoSigns(true);
     } catch (err) {
       setError(err.response?.data?.message || 'Upload failed');
+    }
+  };
+
+  // "Only me" flow → go straight to the document viewer to place fields & sign
+  const handleOnlyMe = () => {
+    setShowWhoSigns(false);
+    navigate(`/documents/${uploadedDoc._id}`);
+  };
+
+  // "Several people" → open invite modal
+  const handleSeveralPeople = () => {
+    setShowWhoSigns(false);
+    setShowInviteSigners(true);
+  };
+
+  // After signers are configured → save them, send the document, and email all signers
+  const handleSignersProceed = async (signers) => {
+    setSavingSigners(true);
+    try {
+      // 1 — Persist signers on the document
+      await documentsApi.updateDocument(uploadedDoc._id, {
+        signers: signers.map((s) => ({
+          name: s.name,
+          email: s.email,
+          permission: s.permission,
+        })),
+      });
+
+      // 2 — Send the document for signing (generates tokens + sends emails to each signer)
+      await documentsApi.sendForSignature(uploadedDoc._id);
+
+      setShowInviteSigners(false);
+      // Navigate to dashboard — the document is now 'sent', signers will be emailed
+      navigate('/documents');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to send document. Please try again.');
+      setShowInviteSigners(false);
+      setShowWhoSigns(true);
+    } finally {
+      setSavingSigners(false);
     }
   };
 
@@ -97,11 +146,10 @@ const UploadDocument = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 PDF File
               </label>
-              
+
               <div
-                className={`relative border-2 border-dashed rounded-lg p-8 text-center ${
-                  dragActive ? 'border-primary-500 bg-primary-50' : 'border-gray-300'
-                }`}
+                className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${dragActive ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                  }`}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
@@ -116,7 +164,7 @@ const UploadDocument = () => {
 
                 {file ? (
                   <div className="flex items-center justify-center gap-3">
-                    <File className="h-8 w-8 text-primary-500" />
+                    <File className="h-8 w-8 text-red-500" />
                     <div className="text-left">
                       <p className="font-medium text-gray-900">{file.name}</p>
                       <p className="text-sm text-gray-500">
@@ -146,9 +194,9 @@ const UploadDocument = () => {
             {uploadProgress > 0 && uploadProgress < 100 && (
               <div className="w-full bg-gray-200 rounded-full h-2.5">
                 <div
-                  className="bg-primary-600 h-2.5 rounded-full transition-all duration-300"
+                  className="bg-red-600 h-2.5 rounded-full transition-all duration-300"
                   style={{ width: `${uploadProgress}%` }}
-                ></div>
+                />
               </div>
             )}
 
@@ -167,6 +215,22 @@ const UploadDocument = () => {
           </form>
         </CardBody>
       </Card>
+
+      {/* Who Signs Modal */}
+      <WhoSignsModal
+        isOpen={showWhoSigns}
+        onClose={() => setShowWhoSigns(false)}
+        fileName={file?.name}
+        onOnlyMe={handleOnlyMe}
+        onSeveralPeople={handleSeveralPeople}
+      />
+
+      {/* Invite Signers Modal */}
+      <InviteSignersModal
+        isOpen={showInviteSigners}
+        onClose={() => { setShowInviteSigners(false); setShowWhoSigns(true); }}
+        onProceed={handleSignersProceed}
+      />
     </div>
   );
 };

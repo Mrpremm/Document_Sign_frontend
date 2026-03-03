@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Document, Page } from 'react-pdf';
+import '../../utils/pdfWorker'; // configure PDF.js worker
 import SignatureCanvas from 'react-signature-canvas';
 import { signApi } from '../../api/sign';
 import Card, { CardBody, CardHeader } from '../../components/ui/Card';
@@ -13,12 +14,13 @@ import { FileText, PenSquare, XCircle, CheckCircle } from 'lucide-react';
 
 const PublicSign = () => {
   const { token } = useParams();
-  const navigate = useNavigate();
-  const [document, setDocument] = useState(null);
+  const [docInfo, setDocInfo] = useState(null);   // { document, signer }
+  const [pdfUrl, setPdfUrl] = useState(null);      // blob: URL string for react-pdf
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -27,12 +29,21 @@ const PublicSign = () => {
 
   useEffect(() => {
     fetchDocument();
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
   }, [token]);
 
   const fetchDocument = async () => {
     try {
-      const data = await signApi.getDocumentByToken(token);
-      setDocument(data);
+      // Fetch document info and PDF blob in parallel
+      const [data, blobUrl] = await Promise.all([
+        signApi.getDocumentByToken(token),
+        signApi.getPdfBlob(token),
+      ]);
+      // data = { document: {...}, signer: {...} }
+      setDocInfo(data);
+      setPdfUrl(blobUrl);
     } catch (err) {
       setError('Invalid or expired signing link');
     } finally {
@@ -41,29 +52,61 @@ const PublicSign = () => {
   };
 
   const handleSign = async () => {
-    if (signatureRef.current && !signatureRef.current.isEmpty()) {
-      setSubmitting(true);
-      try {
-        const signatureData = signatureRef.current.toDataURL();
-        await signApi.signDocument(token, { signature: signatureData });
-        setSuccess(true);
-      } catch (err) {
-        setError('Failed to submit signature');
-      } finally {
-        setSubmitting(false);
-      }
-    } else {
-      setError('Please provide your signature');
+    if (!signatureRef.current || signatureRef.current.isEmpty()) {
+      setError('Please provide your signature before submitting');
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+
+    try {
+      // Get signature as base64 data URL then strip the prefix for the backend
+      const dataUrl = signatureRef.current.toDataURL('image/png');
+
+      // Pick a default position — use the first signatureField if one was defined,
+      // otherwise default to top of page 1
+      const signatureFields = docInfo?.document?.signatureFields;
+      const defaultField = signatureFields && signatureFields.length > 0
+        ? signatureFields[0]
+        : null;
+
+      const position = defaultField
+        ? {
+          pageNumber: defaultField.pageNumber || 1,
+          x: defaultField.position?.x || 50,
+          y: defaultField.position?.y || 100,
+          width: defaultField.width || 150,
+          height: defaultField.height || 50,
+        }
+        : { pageNumber: 1, x: 50, y: 100, width: 150, height: 50 };
+
+      await signApi.signDocument(token, {
+        signatureData: dataUrl,                             // backend strips the prefix
+        position,
+        signatureType: 'draw',
+        name: docInfo?.signer?.name || docInfo?.signer?.email || '',
+      });
+
+      setSuccessMessage('Document signed successfully! Thank you.');
+      setSuccess(true);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to submit signature');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleReject = async () => {
     setSubmitting(true);
+    setError('');
+
     try {
-      await signApi.rejectDocument(token, { reason: rejectReason });
+      await signApi.rejectDocument(token, rejectReason);
+      setSuccessMessage('You have rejected this document. The sender has been notified.');
       setSuccess(true);
     } catch (err) {
-      setError('Failed to reject document');
+      setError(err.response?.data?.message || 'Failed to reject document');
     } finally {
       setSubmitting(false);
       setShowRejectModal(false);
@@ -72,6 +115,7 @@ const PublicSign = () => {
 
   const clearSignature = () => {
     signatureRef.current?.clear();
+    setError('');
   };
 
   if (loading) {
@@ -82,7 +126,7 @@ const PublicSign = () => {
     );
   }
 
-  if (error) {
+  if (error && !docInfo) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
@@ -105,14 +149,8 @@ const PublicSign = () => {
         <Card className="max-w-md w-full">
           <CardBody className="text-center">
             <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-gray-900 mb-2">
-              {document?.status === 'signed' ? 'Document Signed!' : 'Document Rejected'}
-            </h2>
-            <p className="text-gray-600 mb-4">
-              {document?.status === 'signed' 
-                ? 'Thank you for signing the document.' 
-                : 'The document has been rejected.'}
-            </p>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Done!</h2>
+            <p className="text-gray-600 mb-4">{successMessage}</p>
             <Button variant="primary" onClick={() => window.location.href = '/'}>
               Return to Homepage
             </Button>
@@ -122,6 +160,9 @@ const PublicSign = () => {
     );
   }
 
+  const document = docInfo?.document;
+  const signer = docInfo?.signer;
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
@@ -129,22 +170,34 @@ const PublicSign = () => {
           <FileText className="h-12 w-12 text-primary-600 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900">Sign Document</h1>
           <p className="text-gray-600">{document?.title}</p>
+          {signer?.name && (
+            <p className="text-sm text-gray-500 mt-1">Signing as: <strong>{signer.name}</strong> ({signer.email})</p>
+          )}
         </div>
 
+        {/* Already signed notice */}
+        {signer?.signed && (
+          <Alert type="warning" message="You have already signed this document." className="mb-6" />
+        )}
+
+        {/* PDF Viewer */}
         <Card className="mb-6">
           <CardBody>
-            <Document
-              file={`${import.meta.env.VITE_API_BASE_URL}/sign/${token}/file`}
-              onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-              loading={<Spinner />}
-            >
-              <Page 
-                pageNumber={pageNumber} 
-                className="mx-auto shadow-lg"
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-              />
-            </Document>
+            {pdfUrl && (
+              <Document
+                file={pdfUrl}
+                onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+                loading={<Spinner />}
+                error={<p className="text-red-500 text-center py-4">Failed to load PDF preview.</p>}
+              >
+                <Page
+                  pageNumber={pageNumber}
+                  className="mx-auto shadow-lg"
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
+                />
+              </Document>
+            )}
 
             {numPages > 1 && (
               <div className="flex justify-center items-center gap-4 mt-4">
@@ -172,49 +225,55 @@ const PublicSign = () => {
           </CardBody>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <h2 className="text-lg font-semibold">Your Signature</h2>
-          </CardHeader>
-          <CardBody>
-            <div className="border-2 border-gray-200 rounded-lg mb-4">
-              <SignatureCanvas
-                ref={signatureRef}
-                canvasProps={{
-                  className: 'w-full h-48 cursor-crosshair'
-                }}
-              />
-            </div>
-
-            <div className="flex justify-between items-center mb-4">
-              <Button variant="outline" size="sm" onClick={clearSignature}>
-                Clear Signature
-              </Button>
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowRejectModal(true)}
-                >
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Reject
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleSign}
-                  isLoading={submitting}
-                >
-                  <PenSquare className="h-4 w-4 mr-2" />
-                  Sign Document
-                </Button>
+        {/* Signature pad — only show if not already signed */}
+        {!signer?.signed && (
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold">Your Signature</h2>
+              <p className="text-sm text-gray-500 mt-1">Draw your signature in the box below</p>
+            </CardHeader>
+            <CardBody>
+              <div className="border-2 border-gray-200 rounded-lg mb-4 bg-white">
+                <SignatureCanvas
+                  ref={signatureRef}
+                  penColor="black"
+                  canvasProps={{
+                    className: 'w-full h-48 cursor-crosshair',
+                  }}
+                />
               </div>
-            </div>
 
-            {error && <Alert type="error" message={error} />}
-          </CardBody>
-        </Card>
+              <div className="flex justify-between items-center mb-4">
+                <Button variant="outline" size="sm" onClick={clearSignature}>
+                  Clear
+                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowRejectModal(true)}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Reject
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSign}
+                    isLoading={submitting}
+                  >
+                    <PenSquare className="h-4 w-4 mr-2" />
+                    Sign Document
+                  </Button>
+                </div>
+              </div>
 
+              {error && <Alert type="error" message={error} />}
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Reject Modal */}
         <Modal
           isOpen={showRejectModal}
           onClose={() => setShowRejectModal(false)}
@@ -224,6 +283,7 @@ const PublicSign = () => {
               <Button
                 variant="outline"
                 onClick={() => setShowRejectModal(false)}
+                disabled={submitting}
               >
                 Cancel
               </Button>

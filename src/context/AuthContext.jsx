@@ -39,11 +39,12 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     try {
-      const response = await authApi.login(credentials);
-      setUser(response.user);
+      const { user: userData, accessToken } = await authApi.login(credentials);
+      // Set user FIRST so isAuthenticated is true before navigation
+      setUser(userData);
       toast.success('Login successful!');
-      navigate('/dashboard');
-      return response;
+      navigate('/dashboard', { replace: true });
+      return { user: userData, accessToken };
     } catch (error) {
       toast.error(error.response?.data?.message || 'Login failed');
       throw error;
@@ -52,11 +53,12 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      const response = await authApi.register(userData);
-      setUser(response.user);
+      const { user: newUser, accessToken } = await authApi.register(userData);
+      // Set user FIRST so isAuthenticated is true before navigation
+      setUser(newUser);
       toast.success('Registration successful!');
-      navigate('/dashboard');
-      return response;
+      navigate('/dashboard', { replace: true });
+      return { user: newUser, accessToken };
     } catch (error) {
       toast.error(error.response?.data?.message || 'Registration failed');
       throw error;
@@ -66,11 +68,13 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await authApi.logout();
-      setUser(null);
-      toast.info('Logged out successfully');
-      navigate('/login');
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      // Always clear user state and navigate, even if API call fails
+      setUser(null);
+      toast.info('Logged out successfully');
+      navigate('/login', { replace: true });
     }
   };
 

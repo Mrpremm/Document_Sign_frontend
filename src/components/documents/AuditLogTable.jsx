@@ -1,24 +1,49 @@
 import React from 'react';
 import { format } from 'date-fns';
-import { Activity, User, Globe, Clock } from 'lucide-react';
+import { Activity, User, Globe, Clock, Shield, FileText, LogIn, LogOut } from 'lucide-react';
+
+const ACTION_LABELS = {
+  document_created: 'Document Created',
+  document_updated: 'Document Updated',
+  document_viewed: 'Document Viewed',
+  document_sent: 'Document Sent',
+  document_signed: 'Document Signed',
+  document_rejected: 'Document Rejected',
+  document_deleted: 'Document Deleted',
+  document_downloaded: 'Document Downloaded',
+  signature_added: 'Signature Added',
+  signature_removed: 'Signature Removed',
+  email_sent: 'Email Sent',
+  token_generated: 'Token Generated',
+  token_verified: 'Token Verified',
+  user_registered: 'User Registered',
+  login_success: 'Login',
+  login_failed: 'Login Failed',
+  logout: 'Logout',
+  token_refreshed: 'Token Refreshed',
+  password_changed: 'Password Changed',
+  password_reset_requested: 'Password Reset Requested',
+  password_reset_completed: 'Password Reset',
+};
+
+const getActionIcon = (action) => {
+  if (action?.includes('sign')) return <Activity className="h-4 w-4 text-green-500" />;
+  if (action?.includes('reject')) return <Activity className="h-4 w-4 text-red-500" />;
+  if (action?.includes('sent')) return <Globe className="h-4 w-4 text-yellow-500" />;
+  if (action?.includes('login') || action?.includes('logout')) return <LogIn className="h-4 w-4 text-blue-500" />;
+  if (action?.includes('password')) return <Shield className="h-4 w-4 text-purple-500" />;
+  if (action?.includes('document')) return <FileText className="h-4 w-4 text-primary-500" />;
+  return <Clock className="h-4 w-4 text-gray-500" />;
+};
 
 const AuditLogTable = ({ logs }) => {
-  const getActionIcon = (action) => {
-    switch (action) {
-      case 'CREATED':
-        return <Activity className="h-4 w-4 text-green-500" />;
-      case 'VIEWED':
-        return <User className="h-4 w-4 text-blue-500" />;
-      case 'SENT':
-        return <Globe className="h-4 w-4 text-yellow-500" />;
-      case 'SIGNED':
-        return <Activity className="h-4 w-4 text-green-600" />;
-      case 'REJECTED':
-        return <Activity className="h-4 w-4 text-red-500" />;
-      default:
-        return <Clock className="h-4 w-4 text-gray-500" />;
-    }
-  };
+  if (!logs || logs.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        No audit logs found for this document.
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-auto">
@@ -41,34 +66,35 @@ const AuditLogTable = ({ logs }) => {
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {logs.map((log, index) => (
-            <tr key={index} className="hover:bg-gray-50">
+            <tr key={log._id || index} className="hover:bg-gray-50">
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="flex items-center gap-2">
                   {getActionIcon(log.action)}
-                  <span className="text-sm text-gray-900">{log.action}</span>
+                  <span className="text-sm text-gray-900">
+                    {ACTION_LABELS[log.action] || log.action}
+                  </span>
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">{log.user?.email || 'System'}</div>
-                {log.user?.name && (
-                  <div className="text-xs text-gray-500">{log.user.name}</div>
+                <div className="text-sm text-gray-900">
+                  {log.userId?.email || log.metadata?.signerEmail || 'External Signer'}
+                </div>
+                {log.userId?.name && (
+                  <div className="text-xs text-gray-500">{log.userId.name}</div>
                 )}
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">{log.ipAddress}</div>
+                <div className="text-sm font-mono text-gray-700">
+                  {log.ipAddress || '—'}
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {format(new Date(log.timestamp), 'MMM dd, yyyy HH:mm:ss')}
+                {log.timestamp
+                  ? format(new Date(log.timestamp), 'MMM dd, yyyy HH:mm:ss')
+                  : '—'}
               </td>
             </tr>
           ))}
-          {logs.length === 0 && (
-            <tr>
-              <td colSpan="4" className="px-6 py-8 text-center text-gray-500">
-                No audit logs found
-              </td>
-            </tr>
-          )}
         </tbody>
       </table>
     </div>
