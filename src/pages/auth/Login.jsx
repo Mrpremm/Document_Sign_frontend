@@ -1,13 +1,10 @@
-import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../../context/AuthContext';
-import Card, { CardBody, CardHeader } from '../../components/ui/Card';
-import Input from '../../components/ui/Input';
-import Button from '../../components/ui/Button';
-import { FileText } from 'lucide-react';
+import { Eye, EyeOff, PenLine } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -16,66 +13,215 @@ const loginSchema = z.object({
 
 const Login = () => {
   const { login } = useAuth();
-  const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [authError, setAuthError] = useState('');
+
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(loginSchema),
   });
 
   const onSubmit = async (data) => {
+    setAuthError('');
     try {
       await login(data);
     } catch (error) {
-      // Error is handled in AuthContext
+      setAuthError(error?.response?.data?.message || 'Invalid email or password. Please try again.');
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full">
-        <div className="text-center mb-8">
-          <div className="flex justify-center">
-            <FileText className="h-12 w-12 text-primary-600" />
+    <div className="min-h-screen flex" style={{ fontFamily: "'Inter', sans-serif" }}>
+
+      {/* ── Left Panel ── */}
+      <div
+        className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 40%, #312e81 70%, #4f46e5 100%)' }}
+      >
+        {/* Decorative blobs */}
+        <div style={{
+          position: 'absolute', top: '-80px', right: '-80px',
+          width: '360px', height: '360px', borderRadius: '50%',
+          background: 'rgba(99,102,241,0.25)', filter: 'blur(80px)',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '-100px', left: '-60px',
+          width: '420px', height: '420px', borderRadius: '50%',
+          background: 'rgba(139,92,246,0.2)', filter: 'blur(100px)',
+        }} />
+
+        {/* Logo */}
+        <div className="relative z-10 flex items-center gap-3">
+          <div style={{
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            borderRadius: '12px', padding: '10px',
+            boxShadow: '0 4px 20px rgba(99,102,241,0.5)',
+          }}>
+            <PenLine size={24} color="#fff" />
           </div>
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Sign in to your account</h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Or{' '}
-            <Link to="/register" className="font-medium text-primary-600 hover:text-primary-500">
-              create a new account
-            </Link>
+          <div>
+            <span style={{ color: '#fff', fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.5px' }}>
+              Digi<span style={{ color: '#a5b4fc' }}>Sign</span>
+            </span>
+            <p style={{ color: '#a5b4fc', fontSize: '0.7rem', fontWeight: 500, margin: 0 }}>DOCUMENT SIGNING PLATFORM</p>
+          </div>
+        </div>
+
+        {/* Center hero text */}
+        <div className="relative z-10">
+          <h1 style={{
+            color: '#fff', fontSize: '3rem', fontWeight: 800,
+            lineHeight: 1.15, margin: '0 0 1rem',
+          }}>
+            Sign documents<br />
+            <span style={{
+              background: 'linear-gradient(90deg,#a5b4fc,#c4b5fd)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            }}>
+              with confidence
+            </span>
+          </h1>
+          <p style={{ color: '#c7d2fe', fontSize: '1.05rem', lineHeight: 1.7, maxWidth: '360px' }}>
+            Legally binding e-signatures. Zero paperwork. 100% secure.
           </p>
         </div>
 
-        <Card>
-          <CardBody>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <Input
-                label="Email address"
-                type="email"
-                {...register('email')}
-                error={errors.email?.message}
-                placeholder="you@example.com"
-              />
+        {/* Bottom spacer placeholder */}
+        <div className="relative z-10" />
+      </div>
 
-              <Input
-                label="Password"
-                type="password"
-                {...register('password')}
-                error={errors.password?.message}
-                placeholder="••••••••"
-              />
+      {/* ── Right Panel ── */}
+      <div className="flex-1 flex flex-col justify-center items-center p-8 lg:p-16"
+        style={{ background: '#f8fafc' }}>
 
-              <Button
+        {/* Mobile logo */}
+        <div className="lg:hidden flex items-center gap-3 mb-8">
+          <div style={{
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            borderRadius: '12px', padding: '10px',
+          }}>
+            <PenLine size={22} color="#fff" />
+          </div>
+          <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e1b4b' }}>
+            Digi<span style={{ color: '#6366f1' }}>Sign</span>
+          </span>
+        </div>
+
+        <div style={{ width: '100%', maxWidth: '420px' }}>
+          {/* Header */}
+          <div style={{ marginBottom: '2rem' }}>
+            <h2 style={{ fontSize: '1.9rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.4rem', letterSpacing: '-0.5px' }}>
+              Welcome back
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', margin: 0 }}>
+              Sign in to continue to your workspace
+            </p>
+          </div>
+
+          {/* Form Card */}
+          <div style={{
+            background: '#fff', borderRadius: '20px',
+            padding: '2rem', boxShadow: '0 4px 40px rgba(0,0,0,0.07)',
+            border: '1px solid #e2e8f0',
+          }}>
+            {authError && (
+              <div style={{
+                background: '#fef2f2', border: '1px solid #fecaca',
+                borderRadius: '10px', padding: '0.75rem 1rem',
+                color: '#dc2626', fontSize: '0.875rem', marginBottom: '1.25rem',
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+              }}>
+                <span>⚠️</span> {authError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Email */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
+                  Email address
+                </label>
+                <input
+                  id="login-email"
+                  type="email"
+                  {...register('email')}
+                  placeholder="you@example.com"
+                  style={{
+                    width: '100%', padding: '0.75rem 1rem',
+                    border: errors.email ? '1.5px solid #ef4444' : '1.5px solid #e2e8f0',
+                    borderRadius: '10px', fontSize: '0.95rem', color: '#1e293b',
+                    background: '#f8fafc', outline: 'none', boxSizing: 'border-box',
+                    transition: 'border-color 0.2s',
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#6366f1'}
+                  onBlur={e => e.target.style.borderColor = errors.email ? '#ef4444' : '#e2e8f0'}
+                />
+                {errors.email && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.35rem' }}>{errors.email.message}</p>}
+              </div>
+
+              {/* Password */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '0.875rem', fontWeight: 600, color: '#374151' }}>Password</label>
+                  <a href="#" style={{ fontSize: '0.8rem', color: '#6366f1', fontWeight: 500, textDecoration: 'none' }}>Forgot password?</a>
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    {...register('password')}
+                    placeholder="••••••••"
+                    style={{
+                      width: '100%', padding: '0.75rem 3rem 0.75rem 1rem',
+                      border: errors.password ? '1.5px solid #ef4444' : '1.5px solid #e2e8f0',
+                      borderRadius: '10px', fontSize: '0.95rem', color: '#1e293b',
+                      background: '#f8fafc', outline: 'none', boxSizing: 'border-box',
+                    }}
+                    onFocus={e => e.target.style.borderColor = '#6366f1'}
+                    onBlur={e => e.target.style.borderColor = errors.password ? '#ef4444' : '#e2e8f0'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px',
+                    }}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {errors.password && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.35rem' }}>{errors.password.message}</p>}
+              </div>
+
+              {/* Submit */}
+              <button
+                id="login-submit"
                 type="submit"
-                variant="primary"
-                size="lg"
-                isLoading={isSubmitting}
-                className="w-full"
+                disabled={isSubmitting}
+                style={{
+                  width: '100%', padding: '0.85rem',
+                  background: isSubmitting ? '#a5b4fc' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: '#fff', border: 'none', borderRadius: '10px',
+                  fontSize: '0.95rem', fontWeight: 700,
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 15px rgba(99,102,241,0.4)',
+                  transition: 'all 0.2s', letterSpacing: '0.3px',
+                  marginTop: '0.25rem',
+                }}
               >
-                Sign in
-              </Button>
+                {isSubmitting ? 'Signing in…' : 'Sign in →'}
+              </button>
             </form>
-          </CardBody>
-        </Card>
+          </div>
+
+          {/* Register link */}
+          <p style={{ textAlign: 'center', marginTop: '1.5rem', color: '#64748b', fontSize: '0.9rem' }}>
+            Don't have an account?{' '}
+            <Link to="/register" style={{ color: '#6366f1', fontWeight: 700, textDecoration: 'none' }}>
+              Create one free
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );
